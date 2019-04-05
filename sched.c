@@ -8,95 +8,197 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <math.h>
 #include "proc.h"
 #include "sched.h"
+#include "procgen.h"
+//Defines
+#define BLOCKED -1 //Go ahead and make defines for our return types
+#define QTIMEOUT -2
+#define TIMEOUT -3
+#define FINISHED 0
+
 //Functions
 void clearScreen();
-void printRun();
 int doesIOBlock();
-int run(int num);
+int run(proc * prc);
 void loadNew();
-void enqueue(int num, int prior);
-int dequeue(int priority);
+void enqueue(proc * proc1);
+void enqueueBlocked(proc * proc1);
+void enqueueFinished(proc * proc1);
+proc * dequeue(int priority);
+proc * dequeueBlocked();
+proc * dequeueFinished();
+void checkBlocked();
+void generateStats();
+int anyInMemory(int a);
 int sched();
 
 //Globals
 FILE * fp;
-long clk;
-int queue[4][10001];
-int head[4];//Head and tail for each queue
-int tail[4];
-int size[4];// One for each priority
-int counter = 0;;
-
+long clk =0;
+proc * queue[6][10001]; //0-3 - priorities - 4 - blocked, 5- finished
+int head[6];//Head and tail for each queue,
+int tail[6];
+int size[6];// One for each priority
+int runtimeAvgCounter = 0;
+int counter = 0;
+int timeoutCounter = 0;
+int runCount =0;
+long lastRunCount = 0;
 
 int main(int argc, char **argv) {
-    for(int i = 0; i < 4; i++) {
+    //srand(time(NULL));
+    for(int i = 0; i < 4; i++) { //Pre-fill queue array values
         head[i] = 10000;
         tail[i] = 10000;
         size[i] = 0;
     }
-    sched();
-    while(size[0] > 0 || size[1] > 0 || size[2] > 0 || size[3] > 0) {
-        sched();
+    new_process();//Make new process
+    sched(); //Run manually so queue gets filled
+    long nextproc = rand() % 9081 + 20;
+    //While there are procs left in the queues to run
+    while((size[0] > 0 || size[1] > 0 || size[2] > 0 || size[3] > 0 || size[4] > 0) && newProcCounter < 1000) {
+        if(size[0] == 0 && size[1] == 0 && size[2] == 0 && size[3] ==0 )
+            clk++; //Increment clock if were waiting on blocked
+        sched(); //Run sched to run procs
+        if(nextproc <= clk){
+            new_process();
+            nextproc += rand() % 9081 + 20;
+        }
     }
+    generateStats();
+    return 0;
 }
 
-void clearScreen()
+void clearScreen() //Helper func to clear screen terminal
 {
     const char *CLEAR_SCREEN_ANSI = "\e[1;1H\e[2J";
     fprintf(stdout, CLEAR_SCREEN_ANSI, 12);
 }
-void printRun() {
-    printf("Now Running file num : %d\n", getNumber());
-    printf("Location: %i\n",getWhereAt());
-    printf("Priority: %i\n",getPriority());
-    printf("ExecTime: %i\n",getTime());
-    printf("Memory: %i\n", getMemory());
+void printRun(proc * proc1) { // Helper function that prints run info
+    printf("Now Running file num : %d\n", getNumber(proc1));
+    printf("Location: %i\n",getWhereAt(proc1));
+    printf("Priority: %i\n",getPriority(proc1));
+    printf("ExecTime: %i\n",getTime(proc1));
+    printf("Memory: %i\n", getMemory(proc1));
 
 }
-
-int doesIOBlock() {
-    int ran =  rand();
-    int r = (ran % 100);
-    if(r < 2)
-        return 1;
-    return 0;
-}
-
-int run(int num) {
-    int chk = openProc(num);
-    if(chk == 1)
-        return 1;
-    printRun();
-    int c = getNext();
-    while(c != 0 && c != -1){
-        if(doesIOBlock() == 1) {
-            closeProc();
-            return -1;
+void checkBlocked() { //Check if procs on blocked lists can be added back to run queue
+    for(int i = size[4]; i > 0 ;i--) { //For each thing in blocked queue
+        proc * tmp = dequeueBlocked(); //Pull out a proc to look at it
+        if(clk - tmp->blockStart >= tmp->blockTime) { //Done waiting, enqueue back
+            enqueue(tmp); //Put back into run queue
         }
-        clk += c;
-        c = getNext();
-        printf("Next Exec : %d\n", c);
+        else
+            enqueueBlocked(tmp); //Put back in blocked queue
     }
-    closeProc();
+}
+int doesIOBlock() { //Return how long a proc blocks or -1 if it doesnt
+    int r = (rand() % 100);
+    if(r < 2){
+        int x;
+        int howLong = rand() % 10;
+        if(howLong <= 8)
+            x = rand() % 9 + 2;
+        else
+            x = rand() % 307 + 10; // Will be 100-99856
+        int delay = x * x;
+        return delay;
+    }
+    return -1;
+
+}
+
+int run(proc * prc) { //Run proc
+    if(prc->runStart == -1) { //If runstart hasnt been set yet, set it
+        prc->runStart = clk;
+    }
+    //printRun(prc);
+    if(prc->inMemory == 0) {
+        clk+=100; //Add to clock if have to get from disk
+    }
+    if(prc->lastRunTime == -1) {
+        prc->lastRunCount = clk;
+        prc->lastRunTime = 0;
+    }
+    else {
+        if(clk - prc->lastRunCount > prc->lastRunTime)
+            prc->lastRunTime = clk - prc->lastRunCount;
+    }
+    //prc->lastRunTime = clk;
+    int usclk = 0;//Counter for us from files
+    int timer =0;// 10 ms quantum timer
+    int c = getNext(prc); //get next time from file
+    while(c != 0){ //While there's stuff left to read
+        if(c == -1){ //If EOF so process done
+            prc->runEnd = clk;
+            return FINISHED;
+        }
+
+        usclk += c;//Add to us clock
+        int blockTime = doesIOBlock(); //See if blocks
+        if(blockTime != -1) {// I/O Blocks, queue back up
+            prc->blockStart = clk;
+            prc->blockTime = blockTime;
+            return BLOCKED; //Blocked
+        }
+        if(usclk >= 1000) {//When us clock gets to a ms
+            clk++;// inc clock
+            timer++;//inc quantum timer
+            usclk=0;
+        }
+        if(timer >= 10) { //If 10 ms is up
+            timeoutCounter++;
+            return QTIMEOUT; //Time out
+        }
+        if(prc->execTime <= 0) { //Out of exec time
+            prc->runEnd = clk;
+            return TIMEOUT;
+        }
+        prc->execTime--;//Dec remaining time
+        c = getNext(prc);//Get next us time
+        //printf("Next Exec : %i\n", c);
+    }
     return 0;
 }
 
 int sched() {
-    loadNew();
+    loadNew(); //Check for new files before r
      for(int i = 0; i < 4; i++) {
+            int inmem = anyInMemory(i);
+
+
            //Gets current size, to avoid enqueue continually running same thing.
           for(int currentsize = size[i];  currentsize > 0 ; currentsize--) {
-              int next = dequeue(i);
-              int ret = run(next);
-              if(ret == -1)
-                  enqueue(next, i);
-          }
-     }
+                proc * next = dequeue(i);
+                if(inmem == 1 && next->inMemory == 0) //Skip to run ones in memory first
+                    break;              // Otherwise just run sequentially
+                int ret = run(next);
+                if(ret == BLOCKED)
+                    enqueueBlocked(next);
+                else if(ret == QTIMEOUT)
+                    enqueue(next);
+                else if(ret == TIMEOUT)
+                    enqueueFinished(next);
+                else if(ret == FINISHED)
+                    enqueueFinished(next);
+            }
+          checkBlocked();
+          printf("Clock: %d\n", clk);
+        }   
     return 0;
 }
-
+int anyInMemory(int a) { //Check if any in queue are in memeory, if so we'll prefer
+    for(int i = size[a]; i > 0; i--) {
+        proc * next = dequeue(a);
+        if(next->inMemory == 1) {
+            return 1;
+        }
+        enqueue(next);
+    }
+    return 0;
+}
 void loadNew() {
     //Check for new files
     char buf[100];
@@ -104,32 +206,99 @@ void loadNew() {
     snprintf(buf, sizeof(buf), "%i.proc", counter);
     
     while(access(buf, F_OK) != -1) {
-        openProc(counter);
-        int priority = getPriority();
-        closeProc();
-        enqueue(counter, priority);
+        proc * newproc = openProc(counter);
+        enqueue(newproc);
         counter++;
         //Open with counter filename
         snprintf(buf, sizeof(buf), "%i.proc", counter);
     }
 }
 
-void enqueue(int num, int prior) {
-    queue[prior][head[prior]] = num;
+void enqueue(proc * proc1) {
+    int prior = proc1->priority;
+    queue[prior][head[prior]] = proc1;
     head[prior]--;
-    if(tail[prior] == 0)
-        tail[prior] = 10000;
+    if(head[prior] < 0)
+        head[prior] = 10000;
     size[prior]++;
 }
-
-int dequeue(int priority) {
+void enqueueBlocked(proc * proc1) {
+    queue[4][head[4]] = proc1;
+    head[4]--;
+    if(head[4] < 0)
+        head[4] = 10000;
+    size[4]++;
+}
+void enqueueFinished(proc * proc1) {
+    queue[5][head[5]] = proc1;
+    head[5]--;
+    if(head[5] < 0)
+        head[5] = 10000;
+    size[5]++;
+}
+proc * dequeue(int priority) {
     if(size[priority] == 0) {
-        return -1;
+        return NULL;
     }
-    int ret = queue[priority][tail[priority]];
+    proc * ret = queue[priority][tail[priority]];
     tail[priority]--;
-    if(tail[priority] == 0)
+    if(tail[priority] < 0)
         tail[priority] = 10000;
     size[priority]--;
     return ret;
+}
+proc * dequeueBlocked() {
+    int priority = 4;
+    if(size[priority] == 0) {
+        return NULL;
+    }
+    proc * ret = queue[priority][tail[priority]];
+    tail[priority]--;
+    if(tail[priority] < 0)
+        tail[priority] = 10000;
+    size[priority]--;
+    return ret;
+}
+
+proc * dequeueFinished() {
+    int priority = 5;
+    if(size[priority] == 0) {
+        return NULL;
+    }
+    proc * ret = queue[priority][tail[priority]];
+    tail[priority]--;
+    if(tail[priority] < 0)
+        tail[priority] = 10000;
+    size[priority]--;
+    return ret;
+}
+
+void generateStats() {
+    long sum = 0;
+    long maxsum = 0;
+    double stddev = 0.0;
+    double maxstddev = 0.0;
+    int num = size[5];
+    for(int i = num; i > 0; i--) {
+        proc * prc = dequeueFinished();
+        sum += (prc->runEnd - prc->runStart);
+        maxsum += prc->lastRunTime;
+        printf("Time: %ld\n",(prc->runEnd - prc->runStart));
+        enqueueFinished(prc);
+    }
+    long mean = sum / num;
+    long maxmean = maxsum / num;
+    for(int i = num; i > 0; i--) {
+        proc * prc = dequeueFinished();
+        stddev += pow(prc->runEnd - prc->runStart - mean, 2);
+        maxstddev += pow(prc->lastRunTime - maxmean,2);
+        closeProc(prc);
+    }
+    stddev = sqrt(stddev/num);
+    maxstddev = sqrt(maxstddev/num);
+    printf("Avg Run Time: %ld\n", mean);
+    printf("StdDev of Run Time: %f\n", stddev);
+    printf("Avg Last Run Time: %ld\n", maxmean);
+    printf("StdDev of Last Run Time: %f\n", maxstddev);
+    printf("Number of Timeouts: %d\n",timeoutCounter);
 }

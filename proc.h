@@ -14,16 +14,24 @@ typedef struct proc {
     int execTime;
     int memory;
     int openCount;
+    long runStart;
+    long runEnd;
+    int blockTime;
+    long blockStart;
+    int inMemory;
+    long lastRunCount;
+    long lastRunTime;
     FILE * fp;
 }proc;
 
-int openProc(int num);
-int getNumber();
-void closeProc();
-int getPriority();
-int getWhereAt();
-int getTime();
-void setTime(int time);
-int getNext();
-int getMemory();
+
+proc * openProc(int num);
+int getNumber(proc * proc);
+int closeProc(proc * proc1);
+int getPriority(proc * proc1);
+int getWhereAt(proc * proc1);
+int getTime(proc * proc1);
+void setTime(proc * proc1, int time);
+int getNext(proc * proc1);
+int getMemory(proc * proc1);
 #endif //SCHED_PROC_H
