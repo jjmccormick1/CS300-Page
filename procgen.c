@@ -14,6 +14,9 @@ int new_process() {
     snprintf(buf, sizeof(buf), "%i.proc", newProcCounter);
     FILE * fp = fopen(buf,"w");
     assert(fp != NULL);
+    for(int i = 0; i < 256; i++) {
+        fprintf(fp,"%04d %06d %d\n",0,0,0);
+    }
     fprintf(fp, "0\n"); //Where at in run
     fprintf(fp, "%i\n", rand() % 4); //Priority 0-3
     fprintf(fp, "%i\n", (rand() % 46001) + 400); //Exec time 400-40,000

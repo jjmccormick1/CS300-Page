@@ -21,6 +21,14 @@ proc * openProc(int num) {
     snprintf(buf, sizeof(buf), "%i.proc", num);
     proc1->fp = fopen(buf,"r");
     proc1->num = num;
+    for(int i = 1; i < 257; i++){
+        int mem, disk, dirty;
+        fscanf(proc1->fp,"%d", &mem);
+        fscanf(proc1->fp,"%d", &disk);
+        fscanf(proc1->fp,"%d\n", &dirty);
+        pageEntry entry = {mem, disk, dirty};
+        proc1->pageTable[i] = entry;
+    }
     fscanf(proc1->fp,"%d\n%d\n%d\n%d\n",&proc1->whereAt, &proc1->priority, &proc1->execTime, &proc1->memory);
     if(proc1->whereAt > 0)
         fseek(proc1->fp, proc1->whereAt * 3, SEEK_CUR); // Goto where at, may be zero

@@ -6,6 +6,11 @@
 #define SCHED_PROC_H
 
 #include <stdio.h>
+typedef struct pageEntry {
+    int mem;
+    int disk;
+    int dirty;
+}pageEntry;
 
 typedef struct proc {
     int num;
@@ -21,6 +26,7 @@ typedef struct proc {
     int inMemory;
     long lastRunCount;
     long lastRunTime;
+    pageEntry pageTable[257];
     FILE * fp;
 }proc;
 
