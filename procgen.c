@@ -24,7 +24,9 @@ int new_process() {
     long num = (rand() % 99001) + 1000;
     //fprintf(fp, "0"); //Where at in run
     for(long i = 0; i < num; i++) {
-        fprintf(fp,"%02d\n",(rand() % 20) + 1);
+        fprintf(fp,"%02d ",(rand() % 20) + 1);
+        fprintf(fp,"%03d ",(rand() % 255) + 1);
+        fprintf(fp,"%01d\n",rand() % 2);
     }
     fclose(fp);
     newProcCounter++;

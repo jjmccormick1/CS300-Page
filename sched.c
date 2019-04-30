@@ -130,6 +130,8 @@ int run(proc * prc) { //Run proc
     int usclk = 0;//Counter for us from files
     int timer =0;// 10 ms quantum timer
     int c = getNext(prc); //get next time from file
+    int memAddr = getNext(prc);
+    int dirty = getNext(prc);
     while(c != 0){ //While there's stuff left to read
         if(c == -1){ //If EOF so process done
             prc->runEnd = clk;
@@ -158,6 +160,8 @@ int run(proc * prc) { //Run proc
         }
         prc->execTime--;//Dec remaining time
         c = getNext(prc);//Get next us time
+        memAddr = getNext(prc);
+        dirty = getNext(prc);
         //printf("Next Exec : %i\n", c);
     }
     return 0;

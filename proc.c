@@ -68,7 +68,7 @@ int getMemory(proc * proc1) {
 int getNext(proc * proc1) {
     //Current at fp will be after info lines already after reading them
     int next;
-    fscanf(proc1->fp, "%d\n", &next);
+    fscanf(proc1->fp, "%d", &next);
     if(next == EOF)
         return -1;
     proc1->whereAt++;
