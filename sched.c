@@ -158,6 +158,13 @@ int run(proc * prc) { //Run proc
             prc->runEnd = clk;
             return TIMEOUT;
         }
+        else{
+            int mem = prc->pageTable[memAddr].mem;
+            int disk = prc->pageTable[memAddr].mem;
+            if(mem == 0 && disk==0){
+                return BLOCKED;
+            }
+        }
         prc->execTime--;//Dec remaining time
         c = getNext(prc);//Get next us time
         memAddr = getNext(prc);

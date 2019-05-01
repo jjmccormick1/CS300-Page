@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "disk.h"
 //Disk program to handle disk requests
 //Loads the queue then process the queue over and over again
@@ -10,7 +12,7 @@ int qi = 0;
 int time = 10;
 int t = 0;
 int inOrOut = 1;
-FILE * file;
+int filein, fileout;
 
 void enqueue(request * in) {
     q[qi++] = in;
@@ -78,9 +80,13 @@ int process() {
 
 
 int main (int argc, char** argv) {
-    file = fopen(argv[1],"r");
+    char * fifoin = "./diskin";
+    char * fifoout = "./diskout";
+    mkfifo(fifoin, 0666);
+    filein = open(fifoin, O_WRONLY);
+    fileout = open(fifoout, O_RDONLY);
 
-    while(!feof(file)) {
+    while(!feof(filein)) {
         load_q(time);
         if(qi <= 0)//If q not getting filled, increment some
             time+=5;
